@@ -36,7 +36,41 @@ html, body, [class*="css"] {
     color: var(--text);
 }
 
-h1, h2, h3 { font-family: 'Syne', sans-serif; }
+/* Force high-contrast text on all standard Streamlit elements */
+p, li, span, div, label { color: var(--text) !important; }
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Syne', sans-serif;
+    color: #FFFFFF !important;
+}
+
+/* Streamlit markdown text */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] span {
+    color: var(--text) !important;
+}
+
+/* Widget labels — make them bright */
+[data-testid="stWidgetLabel"] label,
+[data-testid="stWidgetLabel"] p,
+.stSelectbox label, .stMultiSelect label,
+.stSlider label, .stCheckbox label {
+    color: #C8D8E8 !important;
+    font-weight: 500 !important;
+}
+
+/* Slider value display */
+[data-testid="stSlider"] [data-testid="stMarkdownContainer"] p {
+    color: var(--gold) !important;
+}
+
+/* Tab text */
+[data-baseweb="tab"] span { color: inherit !important; }
+
+/* Dataframe / table contrast */
+[data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; }
+[data-testid="stDataFrame"] th { background: #0C1520 !important; color: #D4A843 !important; }
+[data-testid="stDataFrame"] td { background: #161F2B !important; color: #E8ECF0 !important; }
 
 #MainMenu, footer, header { visibility: hidden; }
 
@@ -50,11 +84,25 @@ h1, h2, h3 { font-family: 'Syne', sans-serif; }
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 20px 24px;
+    padding: 18px 12px;
     text-align: center;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
-.metric-value { font-family: 'Syne', sans-serif; font-size: 2.2rem; font-weight: 800; }
-.metric-label { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.metric-value {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(1.2rem, 2.5vw, 2rem);
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.metric-label { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 6px; line-height: 1.3; }
 
 .section-header {
     display: flex; align-items: center; gap: 12px;
@@ -297,6 +345,37 @@ for col, (val, color, label) in zip([k1, k2, k3, k4, k5, k6], kpis):
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
+
+
+# ── Matplotlib-free table styler (module level so all tabs can use it) ────────
+def style_risk_table(df_tbl, action_col="Action"):
+    """Pure-CSS cell colouring — no matplotlib dependency.
+    Styler.map() is the correct API for pandas 2.1+ / 3.x
+    (applymap was removed in pandas 3.x).
+    """
+    def risk_color(val):
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            return ""
+        if v >= 70:
+            return "background-color:#5C1010;color:#FFB3B3;font-weight:700;"
+        elif v >= 50:
+            return "background-color:#5C3A10;color:#FFD580;font-weight:700;"
+        return "background-color:#1C3C1C;color:#A8F0A8;font-weight:600;"
+
+    def action_color(val):
+        return {
+            "Closure":        "background-color:#5C1010;color:#FFB3B3;font-weight:700;",
+            "Warning Issued": "background-color:#5C3A10;color:#FFD580;font-weight:700;",
+            "No Action":      "background-color:#1C3C1C;color:#A8F0A8;font-weight:600;",
+        }.get(str(val), "")
+
+    s = df_tbl.style.format({"Viol Rate": "{:.2f}", "Risk Score": "{:.1f}"})
+    s = s.map(risk_color, subset=["Risk Score"])
+    if action_col in df_tbl.columns:
+        s = s.map(action_color, subset=[action_col])
+    return s
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -845,10 +924,9 @@ with tab4:
             "Major Viols", "Repeat", "Stars", "Risk Score", "Last Action",
         ]
         st.markdown("#### 🚨 Top High-Priority Restaurants for Immediate Inspection")
+
         st.dataframe(
-            high_risk.style
-            .background_gradient(subset=["Risk Score"], cmap="Reds")
-            .format({"Viol Rate": "{:.2f}", "Risk Score": "{:.1f}"}),
+            style_risk_table(high_risk, action_col="Last Action"),
             use_container_width=True,
             height=380,
         )
@@ -1124,9 +1202,7 @@ with tab5:
                 "Major Viols", "Repeat", "Stars", "Risk Score", "Action",
             ]
             st.dataframe(
-                top10.style
-                .background_gradient(subset=["Risk Score"], cmap="Reds")
-                .format({"Viol Rate": "{:.2f}", "Risk Score": "{:.1f}"}),
+                style_risk_table(top10, action_col="Action"),
                 use_container_width=True,
             )
 
